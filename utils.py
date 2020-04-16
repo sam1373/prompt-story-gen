@@ -1,6 +1,5 @@
 import numpy as np
 import random
-
 import torch
 import torch.nn.functional as F
 
@@ -137,3 +136,10 @@ def wp_preprocess(text):
     text = text.replace(" n't", "n't")
 
     return text
+
+
+def set_all_seeds(seed=123):
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed(seed)
