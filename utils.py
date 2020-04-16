@@ -1,20 +1,22 @@
-from PIL import Image
-
 import numpy as np
+import random
 
 import torch
 import torch.nn.functional as F
 
-import random
 
 def pil_loader(path):
+    from PIL import Image
+    
     # open path as file to avoid ResourceWarning (https://github.com/python-pillow/Pillow/issues/835)
     with open(path, 'rb') as f:
         img = Image.open(f)
         return img.convert('RGB')
 
+
 def num_params(model):
     return sum([np.prod(p.size()) for p in model.parameters() if p.requires_grad])
+
 
 def top_p_logits(logits, p=0.9):
     """
@@ -38,6 +40,7 @@ def top_p_logits(logits, p=0.9):
 
         # Mask out all logits (tail) that are too small
         return torch.where(probs < batch_mins, torch.tensor(float('-inf')).to(logits), logits)
+
 
 def sample_sequence(model, length, encoder_hidden=None, batch_size=None, context=None, temperature=1, top_p=0.9, device='cuda', sample=True, eos_token=None, tokenizer=None):
     assert context is not None
@@ -68,12 +71,13 @@ def sample_sequence(model, length, encoder_hidden=None, batch_size=None, context
             
             output = torch.cat((output, prev), dim=1)
 
-            #print(output)
-            #input()
+            # print(output)
+            # input()
             
             # Early break
             if prev.size(0) == 1 and prev.item() == eos_token:
                 break
+    
     return output, logprobs / output.size(1)
 
 
@@ -83,46 +87,49 @@ def random_truncate(text, window):
         # Randomly truncate the text
         start_idx = random.randint(0, len(text) - window - 1)
         text = text[start_idx:start_idx+window] # to account sep and cls tokens
+    
     return text
+
 
 def collate_fn_masked(samples):
     """ Creates a batch out of samples """
     max_len = max(map(len, samples))
+    
     # Zero pad mask
-    x_mask = torch.ByteTensor([[1] * len(x) + [0] * (max_len - len(x)) for x in samples]).cuda()
-    x = torch.LongTensor([x + [0] * (max_len - len(x)) for x in samples]).cuda()
+    x_mask = torch.ByteTensor([[1] * len(x) + [0] * (max_len - len(x)) for x in samples])
+    x = torch.LongTensor([x + [0] * (max_len - len(x)) for x in samples])
+    
     return x[:, :-1], x[:, 1:].contiguous(), x_mask[:, 1:]
 
+
 def get_pos_enc_table(side_len, emb_dim=16):
-    ''' Init the sinusoid position encoding table '''
+    """ Init the sinusoid position encoding table """
 
     # keep dim 0 for padding token position encoding zero vector
     position_enc = np.array([
         [pos / np.power(10000, 2 * (j // 2) / emb_dim) for j in range(emb_dim)]
         if pos != 0 else np.zeros(emb_dim) for pos in range(side_len)])
     
-
     position_enc[1:, 0::2] = np.sin(position_enc[1:, 0::2]) # apply sin on 0th,2nd,4th...emb_dim
     position_enc[1:, 1::2] = np.cos(position_enc[1:, 1::2]) # apply cos on 1st,3rd,5th...emb_dim
+    
     return torch.from_numpy(position_enc).type(torch.FloatTensor)
 
 
-def get_pos_embeddings(side_len, emb_dim=16):
-
+def get_pos_embeddings(side_len, emb_dim=16, device='cuda'):
     x = get_pos_enc_table(side_len, emb_dim).view(1, emb_dim, side_len, 1).repeat(1, 1, 1, side_len)
-
     y = get_pos_enc_table(side_len, emb_dim).view(1, emb_dim, 1, side_len).repeat(1, 1, side_len, 1)
+    # print(x.shape, y.shape)
 
-    #print(x.shape, y.shape)
+    return torch.cat((x, y), dim=1).to(device)
 
-    return torch.cat((x, y), dim=1).cuda()
 
 def wp_preprocess(text):
-
     # Standardize some symbols
     text = text.replace('<newline>', '\n')
     text = text.replace('``', '"')
     text = text.replace("''", '"')
+
     # Detokenize
     text = re.sub(' +', ' ', text)
     text = re.sub(' (\'|\.|\,|\:|\?|\!|;)', '\g<1>', text)

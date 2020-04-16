@@ -14,8 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-#modified GPT-2 model
-
+# modified GPT-2 model
 
 import logging
 import math
@@ -26,15 +25,15 @@ import torch.nn as nn
 from torch.nn import CrossEntropyLoss
 from torch.autograd import Variable
 
+from transformers import GPT2Tokenizer, BertTokenizer, BertModel
 from transformers.activations import ACT2FN
 from transformers.configuration_gpt2 import GPT2Config
 from transformers.file_utils import add_start_docstrings, add_start_docstrings_to_callable
 from transformers.modeling_utils import Conv1D, PreTrainedModel, SequenceSummary, prune_conv1d_layer
 
-from transformers import GPT2Tokenizer, BertTokenizer, BertModel
-
 from utils import num_params, sample_sequence, random_truncate, collate_fn_masked
 from keras.preprocessing.sequence import pad_sequences
+
 
 logger = logging.getLogger(__name__)
 
@@ -45,7 +44,6 @@ GPT2_PRETRAINED_MODEL_ARCHIVE_MAP = {
     "gpt2-xl": "https://s3.amazonaws.com/models.huggingface.co/bert/gpt2-xl-pytorch_model.bin",
     "distilgpt2": "https://s3.amazonaws.com/models.huggingface.co/bert/distilgpt2-pytorch_model.bin",
 }
-
 
 
 def load_tf_weights_in_gpt2(model, config, gpt2_checkpoint_path):
@@ -156,11 +154,11 @@ class Attention(nn.Module):
         if autoregr_mask:
             b = self.bias[:, :, ns - nd : ns, :ns]
             
-            #print(nd, ns, w.shape, self.bias.shape, b.shape, q.shape, k.shape)
-            #input()
-            #print(ns, nd)
-            #print(b)
-            #input()
+            # print(nd, ns, w.shape, self.bias.shape, b.shape, q.shape, k.shape)
+            # input()
+            # print(ns, nd)
+            # print(b)
+            # input()
 
             w = w * b - 1e4 * (1 - b)
 
@@ -200,13 +198,13 @@ class Attention(nn.Module):
             x = self.c_attn(x)
             query, key, value = x.split(self.split_size, dim=2)
             autoregr_mask = True
-            #print(0, query.shape, key.shape, value.shape)
+            # print(0, query.shape, key.shape, value.shape)
         else:
             query = self.c_attn(x)
             key = self.c_k(enc_hidden)
             value = self.c_v(enc_hidden)
             autoregr_mask = False
-            #print(1, query.shape, key.shape, value.shape)
+            # print(1, query.shape, key.shape, value.shape)
         query = self.split_heads(query)
         key = self.split_heads(key, k=True)
         value = self.split_heads(value)
@@ -255,36 +253,33 @@ class Block(nn.Module):
             self.extra_ln = nn.LayerNorm(nx, eps=config.layer_norm_epsilon)
             self.encoder_attn = Attention(nx, n_ctx, config, scale, sep_kv=True)
             self.extra_mult = nn.Parameter(torch.ones(1) * 0.1)
-            #self.register_buffer("extra_mult", torch.ones(1))
+            # self.register_buffer("extra_mult", torch.ones(1))
         else:
             self.encoder_attn = None
 
 
     def forward(self, x, layer_past=None, attention_mask=None, head_mask=None, encoder_hidden=None):
-
         if self.encoder_attn is not None and encoder_hidden is not None:
-
-
             output_extra_attn = self.encoder_attn(
                 self.extra_ln(x), layer_past=None, attention_mask=None, head_mask=head_mask, enc_hidden=encoder_hidden
-                #masks should be different
+                # masks should be different
             )
-            #don't need to pass layer_past because the kv stay the same for this attention
-            #then why are we even calculating the conv every time?
-            #probably it's fine cause it's small (49)
+            # don't need to pass layer_past because the kv stay the same for this attention
+            # then why are we even calculating the conv every time?
+            # probably it's fine cause it's small (49)
             ex = output_extra_attn[0]
 
-            #print(self.extra_mult)
-            #input()
-            #print(x.shape)
-            #print(x)
-            #input()
+            # print(self.extra_mult)
+            # input()
+            # print(x.shape)
+            # print(x)
+            # input()
             x = x + ex * self.extra_mult
-            #print(x)
-            #input()
+            # print(x)
+            # input()
 
-            #0.01 - works right, 1.0 - predicts bad as expected
-            #print(1)
+            # 0.01 - works right, 1.0 - predicts bad as expected
+            # print(1)
 
 
         output_attn = self.attn(
@@ -294,13 +289,13 @@ class Block(nn.Module):
 
         x = x + a
 
-        #print(x)
-        #input()
+        # print(x)
+        # input()
         m = self.mlp(self.ln_2(x))
         x = x + m
 
-        #print(x)
-        #input()
+        # print(x)
+        # input()
 
         outputs = [x] + output_attn[1:]
         return outputs  # x, present, (attentions)
@@ -817,52 +812,42 @@ class GPT2DoubleHeadsModel(GPT2PreTrainedModel):
         return outputs  # (lm loss), (mc loss), lm logits, mc logits, presents, (all hidden_states), (attentions)
 
 
-#final model
+# final model
 class FullModel(nn.Module):
 
     def __init__(self):
-
         super().__init__()
 
         self.encoder = BertModel.from_pretrained("bert-base-uncased", cache_dir="cache")
-
         self.encoder_tokenizer = BertTokenizer.from_pretrained('bert-base-uncased', do_lower_case=True, cache_dir="cache")
-
         self.decoder = GPT2LMHeadModel.from_pretrained('gpt2', cache_dir="cache")
-
         self.decoder_tokenizer = GPT2Tokenizer.from_pretrained('gpt2', cache_dir="cache")
-
-        self.cuda()
+        # self.cuda()
 
     def process_prompt(self, prompt, prompt_len=128):
-
-        prompt = [self.encoder_tokenizer.encode(i, verbose=False) for i in prompt]
-        #prompt = [tokenizer.convert_tokens_to_ids(self.encoder_tokenizer.tokenize(i)) for i in prompt]
+        prompt = [self.encoder_tokenizer.encode(i) for i in prompt]
+        # prompt = [tokenizer.convert_tokens_to_ids(self.encoder_tokenizer.tokenize(i)) for i in prompt]
         prompt_len = min(max([len(i) for i in prompt]), prompt_len)
         prompt = pad_sequences(prompt, maxlen=prompt_len, dtype="long", truncating="post", padding="post")
 
         return torch.LongTensor(prompt)
 
     def process_story(self, story, max_context=256):
-
         max_context = min(max([len(i) for i in story]), max_context)
-        story = [random_truncate(self.decoder_tokenizer.encode(i, verbose=False) + [self.decoder_tokenizer.encoder['<|endoftext|>']], max_context) for i in story]
+        story = [random_truncate( self.decoder_tokenizer.encode(i) + [self.decoder_tokenizer.encoder['<|endoftext|>']], max_context ) for i in story]
         
         return collate_fn_masked(story)
-        #returns present, target, mask
+        # returns present, target, mask
 
     def forward(self, story, prompt, past=None):
-
         encoded_prompt, _ = self.encoder(prompt, token_type_ids=None, attention_mask=prompt > 0)
-
         logits, _ = self.decoder(story, past=past, encoder_hidden=encoded_prompt)
 
         return logits
 
 
 if __name__ == '__main__':
-
-    model = FullModel()
+    model = FullModel().cuda()
 
     print(num_params(model.encoder))
     print(num_params(model.decoder))
@@ -905,12 +890,12 @@ if __name__ == '__main__':
 
     print(dec_input.shape)
 
-    #print(tokenizer.encode(example_prompt))
+    # print(tokenizer.encode(example_prompt))
     out, _ = model.decoder(dec_input, past=None, encoder_hidden=encoded)
 
     print(out.shape)
 
-    #test memory for backprop
+    # test memory for backprop
     loss = torch.mean(out)
 
     loss.backward()
