@@ -27,13 +27,15 @@ parser.add_argument('-mc', '--max_context', type=int, default=64)
 parser.add_argument('-wd', '--weight_decay', type=float, default=1e-2)
 parser.add_argument('-nw', '--num_workers', type=int, default=0)
 parser.add_argument('-ms', '--max_samples', type=int, default=-1)
+parser.add_argument('-dir', '--dataset_dir', type=str, default='../writingPrompts/')
+parser.add_argument('-gc', '--gpt2_config', type=str, default='gpt2')
 args = parser.parse_args()
 
 device = torch.device('cuda:%d' % args.device if torch.cuda.is_available() else 'cpu')
 set_all_seeds(123)
 
 ########## Parameters ##########
-DATASET_DIR = '../writingPrompts/'
+DATASET_DIR = args.dataset_dir
 EPOCHS = args.epochs
 PROMPT_LEN = args.prompt_len
 MAX_CONTEXT = args.max_context
@@ -48,7 +50,7 @@ WEIGHT_DECAY = args.weight_decay
 train_loader, val_loader, test_loader = load_data(DATASET_DIR, BATCH_SIZE, NUM_WORKERS, MAX_SAMPLES)
 
 print('Creating Model...')
-model = FullModel().to(device)
+model = FullModel(gpt2_config=args.gpt2_config).to(device)
 
 if os.path.exists('model.pt'):
     print('Restoring trained Model!')

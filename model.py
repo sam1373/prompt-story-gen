@@ -32,7 +32,6 @@ from transformers.file_utils import add_start_docstrings, add_start_docstrings_t
 from transformers.modeling_utils import Conv1D, PreTrainedModel, SequenceSummary, prune_conv1d_layer
 
 from utils import num_params, sample_sequence, random_truncate, collate_fn_masked
-from keras.preprocessing.sequence import pad_sequences
 
 
 logger = logging.getLogger(__name__)
@@ -815,22 +814,22 @@ class GPT2DoubleHeadsModel(GPT2PreTrainedModel):
 # final model
 class FullModel(nn.Module):
 
-    def __init__(self):
+    def __init__(self, gpt2_config):
         super().__init__()
 
         self.encoder = BertModel.from_pretrained("bert-base-uncased", cache_dir="cache")
         self.encoder_tokenizer = BertTokenizer.from_pretrained('bert-base-uncased', do_lower_case=True, cache_dir="cache")
-        self.decoder = GPT2LMHeadModel.from_pretrained('gpt2', cache_dir="cache")
-        self.decoder_tokenizer = GPT2Tokenizer.from_pretrained('gpt2', cache_dir="cache")
+        self.decoder = GPT2LMHeadModel.from_pretrained(gpt2_config, cache_dir="cache")
+        self.decoder_tokenizer = GPT2Tokenizer.from_pretrained(gpt2_config, cache_dir="cache")
         # self.cuda()
 
     def process_prompt(self, prompt, prompt_len=128):
         prompt = [self.encoder_tokenizer.encode(i) for i in prompt]
         # prompt = [tokenizer.convert_tokens_to_ids(self.encoder_tokenizer.tokenize(i)) for i in prompt]
         prompt_len = min(max([len(i) for i in prompt]), prompt_len)
-        prompt = pad_sequences(prompt, maxlen=prompt_len, dtype="long", truncating="post", padding="post")
+        prompt, _, _ = collate_fn_masked(prompt)
 
-        return torch.LongTensor(prompt)
+        return prompt
 
     def process_story(self, story, max_context=256):
         max_context = min(max([len(i) for i in story]), max_context)
