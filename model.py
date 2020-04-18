@@ -249,7 +249,7 @@ class Block(nn.Module):
         self.mlp = MLP(4 * nx, config)
 
         if encoder_attn:
-            self.extra_ln = nn.LayerNorm(encoder_dim, eps=config.layer_norm_epsilon)
+            self.extra_ln = nn.LayerNorm(nx, eps=config.layer_norm_epsilon)
             self.encoder_attn = Attention(encoder_dim, n_ctx, config, scale, sep_kv=True)
             self.extra_mult = nn.Parameter(torch.ones(1) * 0.1)
             # self.register_buffer("extra_mult", torch.ones(1))
