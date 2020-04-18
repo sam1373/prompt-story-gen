@@ -240,7 +240,7 @@ class MLP(nn.Module):
 
 
 class Block(nn.Module):
-    def __init__(self, n_ctx, config, scale=False, encoder_attn=False):
+    def __init__(self, n_ctx, config, scale=False, encoder_attn=False, encoder_dim=768):
         super().__init__()
         nx = config.n_embd
         self.ln_1 = nn.LayerNorm(nx, eps=config.layer_norm_epsilon)
@@ -249,8 +249,8 @@ class Block(nn.Module):
         self.mlp = MLP(4 * nx, config)
 
         if encoder_attn:
-            self.extra_ln = nn.LayerNorm(nx, eps=config.layer_norm_epsilon)
-            self.encoder_attn = Attention(nx, n_ctx, config, scale, sep_kv=True)
+            self.extra_ln = nn.LayerNorm(encoder_dim, eps=config.layer_norm_epsilon)
+            self.encoder_attn = Attention(encoder_dim, n_ctx, config, scale, sep_kv=True)
             self.extra_mult = nn.Parameter(torch.ones(1) * 0.1)
             # self.register_buffer("extra_mult", torch.ones(1))
         else:
