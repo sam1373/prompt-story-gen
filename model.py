@@ -101,7 +101,7 @@ def load_tf_weights_in_gpt2(model, config, gpt2_checkpoint_path):
 
 
 class Attention(nn.Module):
-    def __init__(self, nx, n_ctx, config, scale=False, sep_kv=False):
+    def __init__(self, nx, n_ctx, config, scale=False, sep_kv=False, sep_nx=None):
         super().__init__()
         self.output_attentions = config.output_attentions
 
@@ -115,8 +115,8 @@ class Attention(nn.Module):
 
         self.c_attn = Conv1D(n_state * (1 if sep_kv else 3), nx)
         if sep_kv:
-            self.c_k = Conv1D(n_state, nx)
-            self.c_v = Conv1D(n_state, nx)
+            self.c_k = Conv1D(n_state, sep_nx)
+            self.c_v = Conv1D(n_state, sep_nx)
         self.c_proj = Conv1D(n_state, nx)
         self.attn_dropout = nn.Dropout(config.attn_pdrop)
         self.resid_dropout = nn.Dropout(config.resid_pdrop)
@@ -250,7 +250,7 @@ class Block(nn.Module):
 
         if encoder_attn:
             self.extra_ln = nn.LayerNorm(nx, eps=config.layer_norm_epsilon)
-            self.encoder_attn = Attention(encoder_dim, n_ctx, config, scale, sep_kv=True)
+            self.encoder_attn = Attention(nx, n_ctx, config, scale, sep_kv=True, sep_nx=encoder_dim)
             self.extra_mult = nn.Parameter(torch.ones(1) * 0.1)
             # self.register_buffer("extra_mult", torch.ones(1))
         else:
@@ -263,22 +263,10 @@ class Block(nn.Module):
                 self.extra_ln(x), layer_past=None, attention_mask=None, head_mask=head_mask, enc_hidden=encoder_hidden
                 # masks should be different
             )
-            # don't need to pass layer_past because the kv stay the same for this attention
-            # then why are we even calculating the conv every time?
-            # probably it's fine cause it's small (49)
+            
             ex = output_extra_attn[0]
 
-            # print(self.extra_mult)
-            # input()
-            # print(x.shape)
-            # print(x)
-            # input()
             x = x + ex * self.extra_mult
-            # print(x)
-            # input()
-
-            # 0.01 - works right, 1.0 - predicts bad as expected
-            # print(1)
 
 
         output_attn = self.attn(
