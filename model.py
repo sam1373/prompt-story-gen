@@ -263,7 +263,7 @@ class Block(nn.Module):
                 self.extra_ln(x), layer_past=None, attention_mask=None, head_mask=head_mask, enc_hidden=encoder_hidden
                 # masks should be different
             )
-            
+
             ex = output_extra_attn[0]
 
             x = x + ex * self.extra_mult
@@ -805,9 +805,9 @@ class FullModel(nn.Module):
     def __init__(self, gpt2_config):
         super().__init__()
 
-        self.encoder = BertModel.from_pretrained("bert-base-uncased", cache_dir="cache")
+        self.encoder = nn.DataParallel(BertModel.from_pretrained("bert-base-uncased", cache_dir="cache"))
         self.encoder_tokenizer = BertTokenizer.from_pretrained('bert-base-uncased', do_lower_case=True, cache_dir="cache")
-        self.decoder = GPT2LMHeadModel.from_pretrained(gpt2_config, cache_dir="cache")
+        self.decoder = nn.DataParallel(GPT2LMHeadModel.from_pretrained(gpt2_config, cache_dir="cache"))
         self.decoder_tokenizer = GPT2Tokenizer.from_pretrained(gpt2_config, cache_dir="cache")
         # self.cuda()
 
