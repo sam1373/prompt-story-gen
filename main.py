@@ -11,7 +11,8 @@ from data import load_data
 # from eval import evaluate_dataset
 from model import FullModel
 # from utils import num_params, sample_sequence, random_truncate, collate_fn_masked, get_pos_embeddings
-from utils import set_all_seeds
+from utils import set_all_seeds, sample_sequence
+from optimizers import AdamW
 
 logger = logging.getLogger()
 logger.setLevel(level=logging.ERROR)
@@ -24,7 +25,7 @@ parser.add_argument('-lr', '--learning_rate', type=float, default=0.001)
 parser.add_argument('-bs', '--batch_size', type=int, default=8)
 parser.add_argument('-pl', '--prompt_len', type=int, default=128)
 parser.add_argument('-mc', '--max_context', type=int, default=64)
-parser.add_argument('-wd', '--weight_decay', type=float, default=1e-2)
+parser.add_argument('-wd', '--weight_decay', type=float, default=0)
 parser.add_argument('-nw', '--num_workers', type=int, default=0)
 parser.add_argument('-ms', '--max_samples', type=int, default=-1)
 parser.add_argument('-dir', '--dataset_dir', type=str, default='../writingPrompts/')
@@ -34,6 +35,7 @@ args = parser.parse_args()
 device = torch.device('cuda:%d' % args.device if torch.cuda.is_available() else 'cpu')
 set_all_seeds(123)
 
+print("batch size:", args.batch_size)
 ########## Parameters ##########
 DATASET_DIR = args.dataset_dir
 EPOCHS = args.epochs
@@ -57,13 +59,30 @@ if os.path.exists('model.pt'):
     model.load_state_dict(torch.load('model.pt'), strict=False)
 
 all_params = [p for p in model.parameters() if p.requires_grad]
-optimizer = torch.optim.AdamW(all_params, lr=LEARNING_RATE, weight_decay=WEIGHT_DECAY)
+optimizer = AdamW(all_params, lr=LEARNING_RATE, weight_decay=WEIGHT_DECAY)
 scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=1, gamma=0.9)
 
 print('Training Model for %d epochs...' % EPOCHS)
 ce_loss_fn = nn.CrossEntropyLoss(reduction='none')
 model.train()
 for ep in range(1, EPOCHS+1):
+
+    print("Epoch", ep, "start")
+
+    prompt = ["Reddit buys the moon"]
+
+    prompt = model.process_prompt(prompt, prompt_len=PROMPT_LEN).to(device)
+
+    encoded_prompt, _ = model.encoder(prompt, token_type_ids=None, attention_mask=prompt > 0)
+
+    out, logprobs = sample_sequence(model.decoder, 100, encoder_hidden=encoded_prompt, batch_size=BATCH_SIZE, context=[model.decoder_tokenizer.encoder['<|endoftext|>']], eos_token=model.decoder_tokenizer.encoder['<|endoftext|>'], 
+        sample=True, top_p=0.95)
+
+    for i in out:
+        print(model.decoder_tokenizer.decode(i))
+        
+    print()
+
     epoch_loss = 0
     for prompt, story in tqdm(train_loader):
         optimizer.zero_grad()
