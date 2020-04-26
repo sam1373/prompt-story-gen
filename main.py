@@ -8,7 +8,7 @@ import torch
 import torch.nn as nn
 
 from data import load_data
-# from eval import evaluate_dataset
+from eval_ppl import evaluate_ppl
 from model import FullModel
 # from utils import num_params, sample_sequence, random_truncate, collate_fn_masked, get_pos_embeddings
 from utils import set_all_seeds, sample_sequence
@@ -42,46 +42,56 @@ EPOCHS = args.epochs
 PROMPT_LEN = args.prompt_len
 MAX_CONTEXT = args.max_context
 NUM_WORKERS = args.num_workers
-MAX_SAMPLES = args.max_samples if args.max_samples > 0 else None 
+MAX_SAMPLES = args.max_samples if args.max_samples > 0 else None
+
+model_save_path = 'model.pt'
 
 ########## Hyperparameters ##########
+GPT2_CONFIG = args.gpt2_config
 LEARNING_RATE = args.learning_rate
 BATCH_SIZE = args.batch_size
 WEIGHT_DECAY = args.weight_decay
 
-train_loader, val_loader, test_loader = load_data(DATASET_DIR, BATCH_SIZE, NUM_WORKERS, MAX_SAMPLES)
+train_loader, val_loader, test_loader = load_data(DATASET_DIR, True, BATCH_SIZE, NUM_WORKERS, MAX_SAMPLES)
+_, val_loader_raw, test_loader_raw = load_data(DATASET_DIR, False, BATCH_SIZE, NUM_WORKERS, MAX_SAMPLES)
 
 print('Creating Model...')
-model = FullModel(gpt2_config=args.gpt2_config).to(device)
-
-if os.path.exists('model.pt'):
-    print('Restoring trained Model!')
-    model.load_state_dict(torch.load('model.pt'), strict=False)
+model = FullModel(gpt2_config=GPT2_CONFIG).to(device)
 
 all_params = [p for p in model.parameters() if p.requires_grad]
 optimizer = AdamW(all_params, lr=LEARNING_RATE, weight_decay=WEIGHT_DECAY)
 scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=1, gamma=0.9)
 
+start_epoch = 0
+best_val_ppl = float('inf')
+if os.path.exists(model_save_path):
+    print('Restoring trained model from %s' % model_save_path)
+    checkpoint = torch.load('model.pt')
+    model.load_state_dict(checkpoint['model'], strict=False)
+    scheduler.load_state_dict(checkpoint['scheduler'])
+    optimizer.load_state_dict(checkpoint['optimizer'])
+    start_epoch = checkpoint['epoch']+1
+    best_val_ppl = checkpoint['val_ppl']
+
 print('Training Model for %d epochs...' % EPOCHS)
 ce_loss_fn = nn.CrossEntropyLoss(reduction='none')
 model.train()
-for ep in range(1, EPOCHS+1):
+for ep in range(start_epoch, start_epoch + EPOCHS):
 
-    print("Epoch", ep, "start")
+    # print("Epoch", ep, "start")
 
-    prompt = ["Reddit buys the moon"]
+    # prompt = ["Reddit buys the moon"]
+    # prompt = model.process_prompt(prompt, prompt_len=PROMPT_LEN).to(device)
 
-    prompt = model.process_prompt(prompt, prompt_len=PROMPT_LEN).to(device)
+    # encoded_prompt, _ = model.encoder(prompt, token_type_ids=None, attention_mask=prompt > 0)
 
-    encoded_prompt, _ = model.encoder(prompt, token_type_ids=None, attention_mask=prompt > 0)
+    # out, logprobs = sample_sequence(model.decoder, 100, encoder_hidden=encoded_prompt, batch_size=BATCH_SIZE, context=[model.decoder_tokenizer.encoder['<|endoftext|>']], eos_token=model.decoder_tokenizer.encoder['<|endoftext|>'], 
+    #     sample=True, top_p=0.95, device=device)
 
-    out, logprobs = sample_sequence(model.decoder, 100, encoder_hidden=encoded_prompt, batch_size=BATCH_SIZE, context=[model.decoder_tokenizer.encoder['<|endoftext|>']], eos_token=model.decoder_tokenizer.encoder['<|endoftext|>'], 
-        sample=True, top_p=0.95)
-
-    for i in out:
-        print(model.decoder_tokenizer.decode(i))
+    # for i in out:
+    #     print(model.decoder_tokenizer.decode(i))
         
-    print()
+    # print()
 
     epoch_loss = 0
     for prompt, story in tqdm(train_loader):
@@ -110,6 +120,14 @@ for ep in range(1, EPOCHS+1):
 
     scheduler.step()
 
-    torch.save(model.state_dict(), 'model.pt')
+    ## TODO: Evaluate Model
+    # val_ppl = evaluate_ppl(model, val_loader, val_loader_raw, device)
+    val_ppl = 100
+    if val_ppl < best_val_ppl:
+        best_val_ppl = val_ppl
+
+        checkpoint = {'model': model.state_dict(), 'optimizer' : optimizer.state_dict(), 'scheduler': scheduler.state_dict(),
+                      'epoch': ep, 'val_ppl': val_ppl}
+        torch.save(checkpoint, model_save_path)
 
     print('EPOCH: %3d/%d\t Loss: %.4f' % (ep, EPOCHS, epoch_loss/len(train_loader)))

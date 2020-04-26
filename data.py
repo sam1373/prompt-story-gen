@@ -4,8 +4,10 @@ import torch
 
 
 class PromptsDataset(torch.utils.data.Dataset):
-    def __init__(self, source, target):
+    def __init__(self, source, target, preprocess=True):
         super(PromptsDataset, self).__init__()
+
+        self.preprocess = preprocess
 
         with open(source, errors='ignore') as fs:
             with open(target, errors='ignore') as ft:
@@ -31,9 +33,10 @@ class PromptsDataset(torch.utils.data.Dataset):
 
         prompt = prompt[prompt.find("]") + 1:]
         prompt = re.sub('\[ (.*) \]', '', prompt)
-        prompt = self.wp_preprocess(prompt.strip())
 
-        story = self.wp_preprocess(story.strip())
+        if self.preprocess:
+            prompt = self.wp_preprocess(prompt.strip())
+            story = self.wp_preprocess(story.strip())
         
         return prompt, story
 
@@ -42,10 +45,10 @@ class PromptsDataset(torch.utils.data.Dataset):
         return len(self.samples)
 
 
-def load_data(dataset_dir, batch_size, num_workers=0, max_samples=None):
-    train_dataset = PromptsDataset(dataset_dir + '/train.wp_source', dataset_dir + '/train.wp_target')
-    val_dataset = PromptsDataset(dataset_dir + '/valid.wp_source', dataset_dir + '/valid.wp_target')
-    test_dataset = PromptsDataset(dataset_dir + '/test.wp_source', dataset_dir + '/test.wp_target')
+def load_data(dataset_dir, batch_size, preprocess=True, num_workers=0, max_samples=None):
+    train_dataset = PromptsDataset(dataset_dir + '/train.wp_source', dataset_dir + '/train.wp_target', preprocess)
+    val_dataset = PromptsDataset(dataset_dir + '/valid.wp_source', dataset_dir + '/valid.wp_target', preprocess)
+    test_dataset = PromptsDataset(dataset_dir + '/test.wp_source', dataset_dir + '/test.wp_target', preprocess)
     
     if max_samples is not None:
         train_dataset = torch.utils.data.Subset(train_dataset, np.arange(max_samples))
