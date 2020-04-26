@@ -1,21 +1,13 @@
 """
 Calculates the perplexity given a model.
 """
-import pickle
-import os, re
+import re
 import torch
-import torch.nn as nn
-import torch.nn.functional as F
 import numpy as np
-import argparse
-from random import randint
-from pytorch_pretrained_bert import GPT2Tokenizer, GPT2LMHeadModel, GPT2Config
-from data import PromptDataset, TextDataset
-from data.util import wp_preprocess, compose
 
-def compute_logprobs(token_tensor, model):
-    input_tokens = token_tensor[:, :-1]
-    target_tokens = token_tensor[:, 1:]
+def compute_logprobs(prompt, story, model):
+    input_tokens = prompt
+    target_tokens = story
 
     logits, _ = model(input_tokens)
     lprobs = torch.log_softmax(logits, dim=-1)
@@ -141,7 +133,7 @@ def evaluate_ppl(model, device, d_val, d_val_raw):
         num_errs = 0
 
         batch = []
-        for sample_id, (prompt, story, prompt_raw, story_raw) in enumerate(zip(d_val, d_val_raw)):
+        for sample_id, ((prompt, story), (prompt_raw, story_raw)) in enumerate(zip(d_val, d_val_raw)):
             text = 'Prompt: ' + prompt.strip() + '\n---\n' + story.strip()
             check_text = 'Prompt: ' + prompt_raw.strip() + '\n---\n' + story_raw.strip()
             bpe_tokens = [tokenizer.encoder['<|endoftext|>']] + tokenizer.encode(text)
@@ -155,8 +147,8 @@ def evaluate_ppl(model, device, d_val, d_val_raw):
                 token_tensor = torch.tensor(x, dtype=torch.long, device=device)
 
                 # Compute log probs
-                lps = compute_logprobs(token_tensor, model)
-                token_tensor = token_tensor.cpu().numpy()
+                lps = compute_logprobs(prompt, story, model)
+                #token_tensor = token_tensor.cpu().numpy()
 
                 # Compute individually
                 for i in range(lps.shape[0]):
@@ -177,3 +169,4 @@ def evaluate_ppl(model, device, d_val, d_val_raw):
                     sample_id / len(d_val) * 100, num_errs
                 ))
                 batch = []
+                return np.mean(word_ppls), np.mean(ppls), np.mean(token_diffs)
