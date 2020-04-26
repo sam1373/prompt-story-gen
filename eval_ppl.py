@@ -1,13 +1,13 @@
 # Adapted from https://github.com/calclavia/story-generation/blob/master/analysis/eval_ppl.py
 
 import re
+import numpy as np
 import torch
 from torch.utils.data.dataloader import default_collate
-import numpy as np
+from tqdm import tqdm
+
 
 def compute_logprobs(model, prompt, story, prompt_len, max_context, device):
-    prompt, story = default_collate([(prompt, story)])
-
     prompt = model.process_prompt(prompt, prompt_len).to(device)
 
     story, story_target, story_mask = model.process_story(story, max_context)
@@ -22,6 +22,7 @@ def compute_logprobs(model, prompt, story, prompt_len, max_context, device):
     lprobs = lprobs.gather(-1, story.unsqueeze(-1)).squeeze(-1)
     
     return lprobs
+
 
 def word_level_ppl(target_tokens, lprobs, tokenizer, raw_token=None):
     assert len(target_tokens) == len(lprobs), (len(target_tokens), len(lprobs))
@@ -91,7 +92,8 @@ def word_level_ppl(target_tokens, lprobs, tokenizer, raw_token=None):
         
         raise Exception('Large PPL', tokens, raw_token)
     return ppl, token_diff
-    
+
+
 def evaluate_ppl(model, val_dataset, val_dataset_raw, prompt_len, max_context, device, batch_size):
     """
     Calculates the perplexity given a model.
@@ -105,41 +107,36 @@ def evaluate_ppl(model, val_dataset, val_dataset_raw, prompt_len, max_context, d
         token_diffs = []
         num_errs = 0
 
-        batch = []
-        for sample_id, ((prompt, story), (prompt_raw, story_raw)) in enumerate(zip(val_dataset, val_dataset_raw)):
+        batch, prompt_story = [], []
+        for (prompt, story), (prompt_raw, story_raw) in tqdm(zip(val_dataset, val_dataset_raw), total=len(val_dataset)):
+            prompt_story.append((prompt, story))
+
             text = 'Prompt: ' + prompt.strip() + '\n---\n' + story.strip()
             bpe_tokens = [model.decoder_tokenizer.encoder['<|endoftext|>']] + model.decoder_tokenizer.encode(text)
             
             bpe_tokens = bpe_tokens[:1025] # This limit applies to GPT2
-            # Pad
-            batch.append((bpe_tokens + [0] * (1025 - len(bpe_tokens)), len(bpe_tokens), story_raw.strip().split(' ')))
+            batch.append((bpe_tokens + [0] * (1025 - len(bpe_tokens)), len(bpe_tokens), story_raw.strip().split(' '))) # Pad with 0
 
             if len(batch) == batch_size or len(word_ppls) == len(val_dataset) - 1:
                 x, x_lens, raw_tokens = zip(*batch)
                 token_tensor = torch.tensor(x, dtype=torch.long, device=device)
-
+                
                 # Compute log probs
-                lps = compute_logprobs(model, prompt, story, prompt_len, max_context, device)
-                #token_tensor = token_tensor.cpu().numpy()
+                prompt_batch, story_batch = default_collate(prompt_story)
+                lps = compute_logprobs(model, prompt_batch, story_batch, prompt_len, max_context, device)
+                # token_tensor = token_tensor.cpu().numpy()
 
                 # Compute individually
                 for i in range(lps.shape[0]):
-                    try:
-                        # Mask out some tokens
-                        target_tokens = token_tensor[i, 1:x_lens[i]]
-                        log_probs = lps[i, :x_lens[i] - 1]
-                        ppl, token_diff = word_level_ppl(target_tokens, log_probs.cpu().float().numpy(), model.decoder_tokenizer, raw_tokens[i])
-                        token_diffs.append(token_diff)
-                        word_ppls.append(ppl)
-                        ppls.append(torch.exp(-log_probs.mean()).item())
-                    except Exception as e:
-                        print('Skipping anomaly.')
-                        print(e)
-                        num_errs += 1
-                print('World Level PPL {:.2f} BPE PPL {:.2f} Diff {:.2f} Done: {:.2f}% Skip {}'.format(
-                    np.mean(word_ppls), np.mean(ppls), np.mean(token_diffs),
-                    sample_id / len(val_dataset) * 100, num_errs
-                ))
-                batch = []
+                    # Mask out some tokens
+                    target_tokens = token_tensor[i, 1:x_lens[i]]
+                    log_probs = lps[i, :x_lens[i] - 1]
+                    ppl, token_diff = word_level_ppl(target_tokens, log_probs.cpu().float().numpy(), model.decoder_tokenizer, raw_tokens[i])
+                    token_diffs.append(token_diff)
+                    word_ppls.append(ppl)
+                    ppls.append(torch.exp(-log_probs.mean()).item())
+                batch, prompt_story = [], []
     
+    print('World Level PPL: {:.2f}, BPE PPL: {:.2f}, Diff: {:.2f}, Skip: {}'.format(np.mean(word_ppls), np.mean(ppls), np.mean(token_diffs), num_errs))
+
     return np.mean(word_ppls), np.mean(ppls), np.mean(token_diffs)

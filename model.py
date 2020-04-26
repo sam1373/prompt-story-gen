@@ -805,9 +805,9 @@ class FullModel(nn.Module):
     def __init__(self, gpt2_config):
         super().__init__()
 
-        self.encoder = nn.DataParallel(BertModel.from_pretrained("bert-base-uncased", cache_dir="cache"))
+        self.encoder = BertModel.from_pretrained("bert-base-uncased", cache_dir="cache")
         self.encoder_tokenizer = BertTokenizer.from_pretrained('bert-base-uncased', do_lower_case=True, cache_dir="cache")
-        self.decoder = nn.DataParallel(GPT2LMHeadModel.from_pretrained(gpt2_config, cache_dir="cache"))
+        self.decoder = GPT2LMHeadModel.from_pretrained(gpt2_config, cache_dir="cache")
         self.decoder_tokenizer = GPT2Tokenizer.from_pretrained(gpt2_config, cache_dir="cache")
 
         # Hack to allow tokenizing longer sequences.

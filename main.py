@@ -43,7 +43,7 @@ MAX_CONTEXT = args.max_context
 NUM_WORKERS = args.num_workers
 MAX_SAMPLES = args.max_samples if args.max_samples > 0 else None
 
-model_save_path = 'model.pt'
+model_save_path = 'saved_model.pt'
 
 ########## Hyperparameters ##########
 GPT2_CONFIG = args.gpt2_config
@@ -59,6 +59,15 @@ train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=BATCH_SIZE,
 print('Creating Model...')
 model = FullModel(gpt2_config=GPT2_CONFIG).to(device)
 
+########## for debugging ##########
+a, b = prompt_accuracy(model, val_dataset, PROMPT_LEN, MAX_CONTEXT, device, BATCH_SIZE)
+print(a, b)
+
+word_ppl, bpe_ppl, token_diffs = evaluate_ppl(model, val_dataset, val_dataset_raw, PROMPT_LEN, MAX_CONTEXT, device, BATCH_SIZE)
+
+assert 0 == 1 # Stop runnning here.
+########## for debugging ##########
+
 all_params = [p for p in model.parameters() if p.requires_grad]
 optimizer = AdamW(all_params, lr=LEARNING_RATE, weight_decay=WEIGHT_DECAY)
 scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=1, gamma=0.9)
@@ -67,19 +76,12 @@ start_epoch = 0
 best_val_ppl = float('inf')
 if os.path.exists(model_save_path):
     print('Restoring trained model from %s' % model_save_path)
-    checkpoint = torch.load('model.pt')
+    checkpoint = torch.load(model_save_path)
     model.load_state_dict(checkpoint['model'], strict=False)
     scheduler.load_state_dict(checkpoint['scheduler'])
     optimizer.load_state_dict(checkpoint['optimizer'])
     start_epoch = checkpoint['epoch']+1
     best_val_ppl = checkpoint['val_ppl']
-
-a, b = prompt_accuracy(model, val_dataset, PROMPT_LEN, MAX_CONTEXT, device, BATCH_SIZE)
-print(a, b)
-
-word_ppl, bpe_ppl, token_diffs = evaluate_ppl(model, val_dataset, val_dataset_raw, PROMPT_LEN, MAX_CONTEXT, device, BATCH_SIZE)
-print(word_ppl, bpe_ppl, token_diffs)
-assert 5 == 6
 
 print('Training Model for %d epochs...' % EPOCHS)
 ce_loss_fn = nn.CrossEntropyLoss(reduction='none')
@@ -127,15 +129,14 @@ for ep in range(start_epoch, start_epoch + EPOCHS):
         gc.collect()
 
     scheduler.step()
-    
 
-    ## TODO: Evaluate Model
-    val_ppl, bpe_ppl, token_diffs = evaluate_ppl(model, val_dataset, val_dataset_raw, PROMPT_LEN, MAX_CONTEXT, device, BATCH_SIZE)
-    if val_ppl < best_val_ppl:
-        best_val_ppl = val_ppl
+    val_word_ppl, bpe_ppl, token_diffs = evaluate_ppl(model, val_dataset, val_dataset_raw, PROMPT_LEN, MAX_CONTEXT, device, BATCH_SIZE)
+    model.train()
+    if val_word_ppl < best_val_ppl:
+        best_val_ppl = val_word_ppl
 
         checkpoint = {'model': model.state_dict(), 'optimizer' : optimizer.state_dict(), 'scheduler': scheduler.state_dict(),
-                      'epoch': ep, 'val_ppl': val_ppl}
+                      'epoch': ep, 'val_ppl': val_word_ppl}
         torch.save(checkpoint, model_save_path)
 
     print('EPOCH: %3d/%d\t Loss: %.4f' % (ep, EPOCHS, epoch_loss/len(train_loader)))
