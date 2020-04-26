@@ -10,7 +10,6 @@ import torch.nn as nn
 from data import load_data
 from eval_ppl import evaluate_ppl
 from model import FullModel
-# from utils import num_params, sample_sequence, random_truncate, collate_fn_masked, get_pos_embeddings
 from utils import set_all_seeds, sample_sequence
 from optimizers import AdamW
 
@@ -35,7 +34,6 @@ args = parser.parse_args()
 device = torch.device('cuda:%d' % args.device if torch.cuda.is_available() else 'cpu')
 set_all_seeds(123)
 
-print("batch size:", args.batch_size)
 ########## Parameters ##########
 DATASET_DIR = args.dataset_dir
 EPOCHS = args.epochs
@@ -52,8 +50,10 @@ LEARNING_RATE = args.learning_rate
 BATCH_SIZE = args.batch_size
 WEIGHT_DECAY = args.weight_decay
 
-train_loader, val_loader, test_loader = load_data(DATASET_DIR, True, BATCH_SIZE, NUM_WORKERS, MAX_SAMPLES)
-_, val_loader_raw, test_loader_raw = load_data(DATASET_DIR, False, BATCH_SIZE, NUM_WORKERS, MAX_SAMPLES)
+train_dataset, val_dataset, test_dataset = load_data(DATASET_DIR, True, MAX_SAMPLES)
+_, val_dataset_raw, test_dataset_raw = load_data(DATASET_DIR, False, MAX_SAMPLES)
+
+train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True, num_workers=NUM_WORKERS)
 
 print('Creating Model...')
 model = FullModel(gpt2_config=GPT2_CONFIG).to(device)
@@ -72,6 +72,10 @@ if os.path.exists(model_save_path):
     optimizer.load_state_dict(checkpoint['optimizer'])
     start_epoch = checkpoint['epoch']+1
     best_val_ppl = checkpoint['val_ppl']
+
+word_ppl, bpe_ppl, token_diffs = evaluate_ppl(model, val_dataset, val_dataset_raw, PROMPT_LEN, MAX_CONTEXT, device, BATCH_SIZE)
+print(word_ppl, bpe_ppl, token_diffs)
+assert 5 == 6
 
 print('Training Model for %d epochs...' % EPOCHS)
 ce_loss_fn = nn.CrossEntropyLoss(reduction='none')
@@ -121,8 +125,7 @@ for ep in range(start_epoch, start_epoch + EPOCHS):
     scheduler.step()
 
     ## TODO: Evaluate Model
-    # val_ppl = evaluate_ppl(model, val_loader, val_loader_raw, device)
-    val_ppl = 100
+    val_ppl, bpe_ppl, token_diffs = evaluate_ppl(model, val_dataset, val_dataset_raw, PROMPT_LEN, MAX_CONTEXT, device, BATCH_SIZE)
     if val_ppl < best_val_ppl:
         best_val_ppl = val_ppl
 

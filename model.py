@@ -809,7 +809,10 @@ class FullModel(nn.Module):
         self.encoder_tokenizer = BertTokenizer.from_pretrained('bert-base-uncased', do_lower_case=True, cache_dir="cache")
         self.decoder = nn.DataParallel(GPT2LMHeadModel.from_pretrained(gpt2_config, cache_dir="cache"))
         self.decoder_tokenizer = GPT2Tokenizer.from_pretrained(gpt2_config, cache_dir="cache")
-        # self.cuda()
+
+        # Hack to allow tokenizing longer sequences.
+        self.encoder_tokenizer.max_len = int(1e12)
+        self.decoder_tokenizer.max_len = int(1e12)
 
     def process_prompt(self, prompt, prompt_len=128):
         prompt = [self.encoder_tokenizer.encode(i) for i in prompt]

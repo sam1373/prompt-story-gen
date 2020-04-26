@@ -1,18 +1,26 @@
-"""
-Calculates the perplexity given a model.
-"""
+# Adapted from https://github.com/calclavia/story-generation/blob/master/analysis/eval_ppl.py
+
 import re
 import torch
+from torch.utils.data.dataloader import default_collate
 import numpy as np
 
-def compute_logprobs(prompt, story, model):
-    input_tokens = prompt
-    target_tokens = story
+def compute_logprobs(model, prompt, story, prompt_len, max_context, device):
+    prompt, story = default_collate([(prompt, story)])
 
-    logits, _ = model(input_tokens)
+    prompt = model.process_prompt(prompt, prompt_len).to(device)
+
+    story, story_target, story_mask = model.process_story(story, max_context)
+    story = story.to(device)
+    story_target = story_target.to(device)
+    story_mask = story_mask.to(device)
+
+    logits = model(story, prompt)
+
     lprobs = torch.log_softmax(logits, dim=-1)
     # Extract the probability of the target token at each position
-    lprobs = lprobs.gather(-1, target_tokens.unsqueeze(-1)).squeeze(-1)
+    lprobs = lprobs.gather(-1, story.unsqueeze(-1)).squeeze(-1)
+    
     return lprobs
 
 def word_level_ppl(target_tokens, lprobs, tokenizer, raw_token=None):
@@ -84,48 +92,13 @@ def word_level_ppl(target_tokens, lprobs, tokenizer, raw_token=None):
         raise Exception('Large PPL', tokens, raw_token)
     return ppl, token_diff
     
-def evaluate_ppl(model, device, d_val, d_val_raw):
-    parser = argparse.ArgumentParser(description="")
-    parser.add_argument('--model-path', type=str, help='pretrained model path to local checkpoint')
-    parser.add_argument("--batch-size", type=int, default=40)
-    parser.add_argument('--data-dir', type=str, default='../data')
-    parser.add_argument('--dataset', type=str, default='../data')
-    parser.add_argument("--test", action='store_true', default=False)
-    args = parser.parse_args()
-    print(args)
-
-    if args.batch_size == -1:
-        args.batch_size = 1
-
-    #device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        
-    #model = GPT2LMHeadModel.from_pretrained('gpt2', cache_dir='out/cache')
-
-    #if args.model_path:
-    #    state = torch.load(args.model_path, map_location='cpu')
-    #    model.load_state_dict(state)
-
-    #tokenizer = GPT2Tokenizer(os.path.join(args.data_dir, 'gpt2-vocab.json'), os.path.join(args.data_dir, 'gpt2-merges.txt'))
-    # Hack to allow tokenizing longer sequences.
-    tokenizer.max_len = int(1e12)
-
-    model.half().to(device)
-    model.eval()
-    print('Model loaded.')
-
-    #d_val = PromptDataset(
-    #    os.path.join(args.data_dir, 'writingPrompts/{}.wp_source'.format('test' if args.test else 'valid')),
-    #    os.path.join(args.data_dir, 'writingPrompts/{}.wp_target'.format('test' if args.test else 'valid')),
-    #    wp_preprocess
-    #)
-    #d_val_raw = PromptDataset(
-    #    os.path.join(args.data_dir, 'writingPrompts/{}.wp_source'.format('test' if args.test else 'valid')),
-    #    os.path.join(args.data_dir, 'writingPrompts/{}.wp_target'.format('test' if args.test else 'valid'))
-    #)
+def evaluate_ppl(model, val_dataset, val_dataset_raw, prompt_len, max_context, device, batch_size):
+    """
+    Calculates the perplexity given a model.
+    """
+    print('Computing model perplexity...')
     
-    print('Data loaded.')
-
-    print('Running evaluation...')
+    model.eval()
     with torch.no_grad():
         ppls = []
         word_ppls = []
@@ -133,21 +106,20 @@ def evaluate_ppl(model, device, d_val, d_val_raw):
         num_errs = 0
 
         batch = []
-        for sample_id, ((prompt, story), (prompt_raw, story_raw)) in enumerate(zip(d_val, d_val_raw)):
+        for sample_id, ((prompt, story), (prompt_raw, story_raw)) in enumerate(zip(val_dataset, val_dataset_raw)):
             text = 'Prompt: ' + prompt.strip() + '\n---\n' + story.strip()
-            check_text = 'Prompt: ' + prompt_raw.strip() + '\n---\n' + story_raw.strip()
-            bpe_tokens = [tokenizer.encoder['<|endoftext|>']] + tokenizer.encode(text)
-            # (This limit applies to GPT2)
-            bpe_tokens = bpe_tokens[:1025]
+            bpe_tokens = [model.decoder_tokenizer.encoder['<|endoftext|>']] + model.decoder_tokenizer.encode(text)
+            
+            bpe_tokens = bpe_tokens[:1025] # This limit applies to GPT2
             # Pad
-            batch.append((bpe_tokens + [0] * (1025 - len(bpe_tokens)), len(bpe_tokens), check_text.split('---\n')[1].split(' ')))
+            batch.append((bpe_tokens + [0] * (1025 - len(bpe_tokens)), len(bpe_tokens), story_raw.strip().split(' ')))
 
-            if len(batch) == args.batch_size or len(word_ppls) == len(d_val) - 1:
+            if len(batch) == batch_size or len(word_ppls) == len(val_dataset) - 1:
                 x, x_lens, raw_tokens = zip(*batch)
                 token_tensor = torch.tensor(x, dtype=torch.long, device=device)
 
                 # Compute log probs
-                lps = compute_logprobs(prompt, story, model)
+                lps = compute_logprobs(model, prompt, story, prompt_len, max_context, device)
                 #token_tensor = token_tensor.cpu().numpy()
 
                 # Compute individually
@@ -156,7 +128,7 @@ def evaluate_ppl(model, device, d_val, d_val_raw):
                         # Mask out some tokens
                         target_tokens = token_tensor[i, 1:x_lens[i]]
                         log_probs = lps[i, :x_lens[i] - 1]
-                        ppl, token_diff = word_level_ppl(target_tokens, log_probs.cpu().float().numpy(), tokenizer, raw_tokens[i])
+                        ppl, token_diff = word_level_ppl(target_tokens, log_probs.cpu().float().numpy(), model.decoder_tokenizer, raw_tokens[i])
                         token_diffs.append(token_diff)
                         word_ppls.append(ppl)
                         ppls.append(torch.exp(-log_probs.mean()).item())
@@ -166,7 +138,8 @@ def evaluate_ppl(model, device, d_val, d_val_raw):
                         num_errs += 1
                 print('World Level PPL {:.2f} BPE PPL {:.2f} Diff {:.2f} Done: {:.2f}% Skip {}'.format(
                     np.mean(word_ppls), np.mean(ppls), np.mean(token_diffs),
-                    sample_id / len(d_val) * 100, num_errs
+                    sample_id / len(val_dataset) * 100, num_errs
                 ))
                 batch = []
-                return np.mean(word_ppls), np.mean(ppls), np.mean(token_diffs)
+    
+    return np.mean(word_ppls), np.mean(ppls), np.mean(token_diffs)

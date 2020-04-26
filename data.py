@@ -45,7 +45,7 @@ class PromptsDataset(torch.utils.data.Dataset):
         return len(self.samples)
 
 
-def load_data(dataset_dir, batch_size, preprocess=True, num_workers=0, max_samples=None):
+def load_data(dataset_dir, preprocess=True, max_samples=None):
     train_dataset = PromptsDataset(dataset_dir + '/train.wp_source', dataset_dir + '/train.wp_target', preprocess)
     val_dataset = PromptsDataset(dataset_dir + '/valid.wp_source', dataset_dir + '/valid.wp_target', preprocess)
     test_dataset = PromptsDataset(dataset_dir + '/test.wp_source', dataset_dir + '/test.wp_target', preprocess)
@@ -55,10 +55,6 @@ def load_data(dataset_dir, batch_size, preprocess=True, num_workers=0, max_sampl
         val_dataset = torch.utils.data.Subset(val_dataset, np.arange(max_samples))
         test_dataset = torch.utils.data.Subset(test_dataset, np.arange(max_samples))
     
-    train_loader = torch.utils.data.DataLoader(dataset=train_dataset, batch_size=batch_size, shuffle=True, num_workers=num_workers)
-    val_loader = torch.utils.data.DataLoader(dataset=val_dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers)
-    test_loader = torch.utils.data.DataLoader(dataset=test_dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers)
+    print('Number of Samples --> Train:%d, Val:%d, Test:%d' %(len(train_dataset), len(val_dataset), len(test_dataset)))
 
-    print('Number of Samples --> Train:%d\t Val:%d\t Test:%d' %(len(train_dataset), len(val_dataset), len(test_dataset)))
-
-    return train_loader, val_loader, test_loader
+    return train_dataset, val_dataset, test_dataset
