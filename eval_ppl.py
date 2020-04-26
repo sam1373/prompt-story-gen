@@ -92,7 +92,7 @@ def word_level_ppl(target_tokens, lprobs, tokenizer, raw_token=None):
         raise Exception('Large PPL', tokens, raw_token)
     return ppl, token_diff
     
-def run_model():
+def evaluate_ppl(model, device, d_val, d_val_raw):
     parser = argparse.ArgumentParser(description="")
     parser.add_argument('--model-path', type=str, help='pretrained model path to local checkpoint')
     parser.add_argument("--batch-size", type=int, default=40)
@@ -105,15 +105,15 @@ def run_model():
     if args.batch_size == -1:
         args.batch_size = 1
 
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    #device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         
-    model = GPT2LMHeadModel.from_pretrained('gpt2', cache_dir='out/cache')
+    #model = GPT2LMHeadModel.from_pretrained('gpt2', cache_dir='out/cache')
 
-    if args.model_path:
-        state = torch.load(args.model_path, map_location='cpu')
-        model.load_state_dict(state)
+    #if args.model_path:
+    #    state = torch.load(args.model_path, map_location='cpu')
+    #    model.load_state_dict(state)
 
-    tokenizer = GPT2Tokenizer(os.path.join(args.data_dir, 'gpt2-vocab.json'), os.path.join(args.data_dir, 'gpt2-merges.txt'))
+    #tokenizer = GPT2Tokenizer(os.path.join(args.data_dir, 'gpt2-vocab.json'), os.path.join(args.data_dir, 'gpt2-merges.txt'))
     # Hack to allow tokenizing longer sequences.
     tokenizer.max_len = int(1e12)
 
@@ -121,15 +121,15 @@ def run_model():
     model.eval()
     print('Model loaded.')
 
-    d_val = PromptDataset(
-        os.path.join(args.data_dir, 'writingPrompts/{}.wp_source'.format('test' if args.test else 'valid')),
-        os.path.join(args.data_dir, 'writingPrompts/{}.wp_target'.format('test' if args.test else 'valid')),
-        wp_preprocess
-    )
-    d_val_raw = PromptDataset(
-        os.path.join(args.data_dir, 'writingPrompts/{}.wp_source'.format('test' if args.test else 'valid')),
-        os.path.join(args.data_dir, 'writingPrompts/{}.wp_target'.format('test' if args.test else 'valid'))
-    )
+    #d_val = PromptDataset(
+    #    os.path.join(args.data_dir, 'writingPrompts/{}.wp_source'.format('test' if args.test else 'valid')),
+    #    os.path.join(args.data_dir, 'writingPrompts/{}.wp_target'.format('test' if args.test else 'valid')),
+    #    wp_preprocess
+    #)
+    #d_val_raw = PromptDataset(
+    #    os.path.join(args.data_dir, 'writingPrompts/{}.wp_source'.format('test' if args.test else 'valid')),
+    #    os.path.join(args.data_dir, 'writingPrompts/{}.wp_target'.format('test' if args.test else 'valid'))
+    #)
     
     print('Data loaded.')
 
@@ -175,6 +175,3 @@ def run_model():
                     sample_id / len(d_val) * 100, num_errs
                 ))
                 batch = []
-
-if __name__ == '__main__':
-    run_model()
