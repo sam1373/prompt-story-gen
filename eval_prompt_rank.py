@@ -2,32 +2,17 @@
 Calculates the prompt ranking accuracy given a model.
 """
 import pickle
-import os, re
+import  re
 import torch
-import torch.nn as nn
-import torch.nn.functional as F
 import numpy as np
-import argparse
 from random import randint
 from datetime import datetime
-from pytorch_pretrained_bert import GPT2Tokenizer, GPT2LMHeadModel, GPT2Config
-from data import PromptDataset, TextDataset
-from data.util import wp_preprocess, compose
-from .eval import compute_logprobs
+from torch.utils.data.dataloader import default_collate
+from eval_ppl import compute_logprobs
 
-def prompt_accuracy(model, device, d_val):
-
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--model-path', type=str,
-                        help='pretrained model path to local checkpoint')
-    parser.add_argument("--num-samples", type=int, default=1000)
-    parser.add_argument('--data-dir', type=str, default='../data')
-    parser.add_argument('--dataset', type=str, default='../data')
-    parser.add_argument("--test", action='store_true', default=False)
-    args = parser.parse_args()
-    print(args)
-
-    num_samples = args.num_samples 
+def prompt_accuracy(model, d_val, prompt_len, max_context, device, batch_size):
+    print("Evaluating prompt rank...")
+    num_samples = 30 
 
     #if args.model_path:
     #    if args.model_path == 'random':
@@ -40,9 +25,6 @@ def prompt_accuracy(model, device, d_val):
     #            print('Failed to load weights strictly. Trying unstrict...')
     #            model.load_state_dict(state, strict=False)
 
-    tokenizer = GPT2Tokenizer(os.path.join(args.data_dir, 'gpt2-vocab.json'), os.path.join(args.data_dir, 'gpt2-merges.txt'))
-
-    model.half().to(device)
     model.eval()
     print('Model loaded.')
     
@@ -59,12 +41,16 @@ def prompt_accuracy(model, device, d_val):
         sample_ten = []
         sample_prompts = []
         text = d_val[i]
+        prompt = []
+        story = []
         sample_ten.append(text)
 
         # get story
         #cur_prompt, cur_story = text.split('---\n')
-        cur_prompl, cur_story = text
-        sample_prompts.append(cur_prompt)
+        cur_prompt, cur_story = text
+        prompt.append(cur_prompt)
+        story.append(cur_story)
+        sample_prompts.append('Prompt: ' + cur_prompt.strip() + '\n---\n')
         # sample 9 separate prompts
         while True:
             sample_nine = list(np.random.randint(d_len, size=10))
@@ -75,6 +61,8 @@ def prompt_accuracy(model, device, d_val):
             wrong_prompt = d_val[j][0]
             
             wrong_text = 'Prompt: ' + wrong_prompt.strip() + '\n---\n' + cur_story.strip()
+            prompt.append(wrong_prompt)
+            story.append(cur_story)
             sample_ten.append(wrong_text)
             sample_prompts.append('Prompt: ' + wrong_prompt.strip() + '\n---\n')
         
@@ -83,10 +71,10 @@ def prompt_accuracy(model, device, d_val):
             logls = []
             batch = []
 
-            prompt_lens = [len(tokenizer.encode(p)) for p in sample_prompts]
+            prompt_lens = [len(model.decoder_tokenizer.encode(p)) for p in sample_prompts]
             # tokenise and create batch
             for text in sample_ten:
-                bpe_tokens = tokenizer.encode(text)
+                bpe_tokens = model.decoder_tokenizer.encode(text)
                 # TODO (This limit applies to GPT2)
                 bpe_tokens = bpe_tokens[:1025]
                 # Pad
@@ -96,7 +84,7 @@ def prompt_accuracy(model, device, d_val):
             token_tensor = torch.tensor(x, dtype=torch.long, device=device)
 
             # Compute log probs
-            lps = compute_logprobs(token_tensor, model)
+            lps = compute_logprobs(model, prompt, story, prompt_len, max_context, device)
             token_tensor = token_tensor.cpu().numpy()
 
             # Compute individually

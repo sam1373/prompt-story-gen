@@ -9,6 +9,7 @@ import torch.nn as nn
 
 from data import load_data
 from eval_ppl import evaluate_ppl
+from eval_prompt_rank import prompt_accuracy
 from model import FullModel
 from utils import set_all_seeds, sample_sequence
 from optimizers import AdamW
@@ -73,6 +74,9 @@ if os.path.exists(model_save_path):
     start_epoch = checkpoint['epoch']+1
     best_val_ppl = checkpoint['val_ppl']
 
+a, b = prompt_accuracy(model, val_dataset, PROMPT_LEN, MAX_CONTEXT, device, BATCH_SIZE)
+print(a, b)
+
 word_ppl, bpe_ppl, token_diffs = evaluate_ppl(model, val_dataset, val_dataset_raw, PROMPT_LEN, MAX_CONTEXT, device, BATCH_SIZE)
 print(word_ppl, bpe_ppl, token_diffs)
 assert 5 == 6
@@ -123,6 +127,7 @@ for ep in range(start_epoch, start_epoch + EPOCHS):
         gc.collect()
 
     scheduler.step()
+    
 
     ## TODO: Evaluate Model
     val_ppl, bpe_ppl, token_diffs = evaluate_ppl(model, val_dataset, val_dataset_raw, PROMPT_LEN, MAX_CONTEXT, device, BATCH_SIZE)
