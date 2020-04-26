@@ -15,7 +15,7 @@ from data import PromptDataset, TextDataset
 from data.util import wp_preprocess, compose
 from .eval import compute_logprobs
 
-def prompt_accuracy():
+def prompt_accuracy(model, device, d_val):
 
     parser = argparse.ArgumentParser()
     parser.add_argument('--model-path', type=str,
@@ -29,32 +29,22 @@ def prompt_accuracy():
 
     num_samples = args.num_samples 
 
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-    model = GPT2LMHeadModel.from_pretrained('gpt2', cache_dir='out/cache')
-
-    if args.model_path:
-        if args.model_path == 'random':
-            model.apply(model.init_weights)
-        else:
-            state = torch.load(args.model_path, map_location='cpu')
-            try:
-                model.load_state_dict(state)
-            except:
-                print('Failed to load weights strictly. Trying unstrict...')
-                model.load_state_dict(state, strict=False)
+    #if args.model_path:
+    #    if args.model_path == 'random':
+    #        model.apply(model.init_weights)
+    #    else:
+    #        state = torch.load(args.model_path, map_location='cpu')
+    #        try:
+    #            model.load_state_dict(state)
+    #        except:
+    #            print('Failed to load weights strictly. Trying unstrict...')
+    #            model.load_state_dict(state, strict=False)
 
     tokenizer = GPT2Tokenizer(os.path.join(args.data_dir, 'gpt2-vocab.json'), os.path.join(args.data_dir, 'gpt2-merges.txt'))
 
     model.half().to(device)
     model.eval()
     print('Model loaded.')
-
-    d_val = PromptDataset(
-        os.path.join(args.data_dir, 'writingPrompts/{}.wp_source'.format('test' if args.test else 'valid')),
-        os.path.join(args.data_dir, 'writingPrompts/{}.wp_target'.format('test' if args.test else 'valid')),
-        wp_preprocess
-    )
     
     print('Data loaded.')
 
@@ -72,7 +62,8 @@ def prompt_accuracy():
         sample_ten.append(text)
 
         # get story
-        cur_prompt, cur_story = text.split('---\n')
+        #cur_prompt, cur_story = text.split('---\n')
+        cur_prompl, cur_story = text
         sample_prompts.append(cur_prompt)
         # sample 9 separate prompts
         while True:
@@ -80,7 +71,8 @@ def prompt_accuracy():
             if i not in sample_nine:
                 break
         for j in sample_nine:
-            wrong_prompt = d_val[j].split('---\n')[0]
+            #wrong_prompt = d_val[j].split('---\n')[0]
+            wrong_prompt = d_val[j][0]
             
             wrong_text = 'Prompt: ' + wrong_prompt.strip() + '\n---\n' + cur_story.strip()
             sample_ten.append(wrong_text)
@@ -117,9 +109,4 @@ def prompt_accuracy():
             total += 1
             batch = []
     
-        print('{} - Prompt Ranking accuracy: {}'.format(
-            datetime.now() - start, hit / total
-        ))
-
-if __name__ == '__main__':
-    prompt_accuracy()
+            return(datetime.now() - start, hit / total)
