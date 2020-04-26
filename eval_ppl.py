@@ -141,7 +141,9 @@ def evaluate_ppl(model, device, d_val, d_val_raw):
         num_errs = 0
 
         batch = []
-        for sample_id, (text, check_text) in enumerate(zip(d_val, d_val_raw)):
+        for sample_id, (prompt, story, prompt_raw, story_raw) in enumerate(zip(d_val, d_val_raw)):
+            text = 'Prompt: ' + prompt.strip() + '\n---\n' + story.strip()
+            check_text = 'Prompt: ' + prompt_raw.strip() + '\n---\n' + story_raw.strip()
             bpe_tokens = [tokenizer.encoder['<|endoftext|>']] + tokenizer.encode(text)
             # (This limit applies to GPT2)
             bpe_tokens = bpe_tokens[:1025]
