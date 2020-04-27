@@ -64,8 +64,6 @@ a, b = prompt_accuracy(model, val_dataset, PROMPT_LEN, MAX_CONTEXT, device, BATC
 print(a, b)
 
 word_ppl, bpe_ppl, token_diffs = evaluate_ppl(model, val_dataset, val_dataset_raw, PROMPT_LEN, MAX_CONTEXT, device, BATCH_SIZE)
-
-assert 0 == 1 # Stop runnning here.
 ########## for debugging ##########
 
 all_params = [p for p in model.parameters() if p.requires_grad]

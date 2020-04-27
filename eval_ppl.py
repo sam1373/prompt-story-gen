@@ -10,7 +10,7 @@ from tqdm import tqdm
 def compute_logprobs(model, prompt, story, prompt_len, max_context, device):
     prompt = model.process_prompt(prompt, prompt_len).to(device)
 
-    story, story_target, story_mask = model.process_story(story, max_context)
+    story, story_target, story_mask = model.process_story(story, 1024, False)
     story = story.to(device)
     story_target = story_target.to(device)
     story_mask = story_mask.to(device)
@@ -25,7 +25,7 @@ def compute_logprobs(model, prompt, story, prompt_len, max_context, device):
 
 
 def word_level_ppl(target_tokens, lprobs, tokenizer, raw_token=None):
-    assert len(target_tokens) == len(lprobs), (len(target_tokens), len(lprobs))
+    # assert len(target_tokens) == len(lprobs), (len(target_tokens), len(lprobs))
 
     # Convert BPE lprobs to word lprobs
     word_lprobs = []
@@ -36,7 +36,7 @@ def word_level_ppl(target_tokens, lprobs, tokenizer, raw_token=None):
 
     for token, lp in zip(target_tokens, lprobs):
         # Follow how it's detokenized.
-        chars = tokenizer.decoder[token]
+        chars = tokenizer.decoder[token.item()]
         new_add += bytearray([tokenizer.byte_decoder[c] for c in chars]).decode('utf-8', errors=tokenizer.errors)
         cur_lp.append(lp)
 
@@ -108,12 +108,13 @@ def evaluate_ppl(model, val_dataset, val_dataset_raw, prompt_len, max_context, d
         num_errs = 0
 
         batch, prompt_story = [], []
-        for (prompt, story), (prompt_raw, story_raw) in tqdm(zip(val_dataset, val_dataset_raw), total=len(val_dataset)):
+        for (prompt, story), (prompt_raw, story_raw) in zip(val_dataset, val_dataset_raw):
+            # print(len(story))
             prompt_story.append((prompt, story))
 
-            text = 'Prompt: ' + prompt.strip() + '\n---\n' + story.strip()
+            text = story
             bpe_tokens = [model.decoder_tokenizer.encoder['<|endoftext|>']] + model.decoder_tokenizer.encode(text)
-            
+            # print(len(bpe_tokens))
             bpe_tokens = bpe_tokens[:1025] # This limit applies to GPT2
             batch.append((bpe_tokens + [0] * (1025 - len(bpe_tokens)), len(bpe_tokens), story_raw.strip().split(' '))) # Pad with 0
 
@@ -130,6 +131,7 @@ def evaluate_ppl(model, val_dataset, val_dataset_raw, prompt_len, max_context, d
                 for i in range(lps.shape[0]):
                     # Mask out some tokens
                     target_tokens = token_tensor[i, 1:x_lens[i]]
+                    # print(x_lens[i], target_tokens.shape, lps.shape)
                     log_probs = lps[i, :x_lens[i] - 1]
                     ppl, token_diff = word_level_ppl(target_tokens, log_probs.cpu().float().numpy(), model.decoder_tokenizer, raw_tokens[i])
                     token_diffs.append(token_diff)

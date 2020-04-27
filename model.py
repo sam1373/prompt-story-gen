@@ -822,9 +822,14 @@ class FullModel(nn.Module):
 
         return prompt
 
-    def process_story(self, story, max_context=256):
+    def process_story(self, story, max_context=256, random=True):
         max_context = min(max([len(i) for i in story]), max_context)
-        story = [random_truncate([self.decoder_tokenizer.encoder['<|endoftext|>']] + self.decoder_tokenizer.encode(i) + [self.decoder_tokenizer.encoder['<|endoftext|>']], max_context ) for i in story]
+        story = [[self.decoder_tokenizer.encoder['<|endoftext|>']] + self.decoder_tokenizer.encode(i) + [self.decoder_tokenizer.encoder['<|endoftext|>']] for i in story]
+
+        if random:
+            story = [random_truncate(i, max_context) for i in story]
+        else:
+            story = [i[:max_context] for i in story]
         
         return collate_fn_masked(story)
         # returns present, target, mask
