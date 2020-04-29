@@ -79,6 +79,25 @@ def sample_sequence(model, length, encoder_hidden=None, batch_size=None, context
     
     return output, logprobs / output.size(1)
 
+"""
+def beam_search(data, k):
+    # algo outline for beam search
+    sequences = [[list(), 1.0]]
+    # walk over each step in sequence
+    for row in data:
+        all_candidates = list()
+        # expand each current candidate
+        for i in range(len(sequences)):
+            seq, score = sequences[i]
+            for j in range(len(row)):
+                candidate = [seq + [j], score * -log(row[j])]
+                all_candidates.append(candidate)
+        # order all candidates by score
+        ordered = sorted(all_candidates, key=lambda tup:tup[1])
+        # select k best
+        sequences = ordered[:k]
+    return sequences
+"""
 
 def random_truncate(text, window):
     """ Randomly truncates text to window size """
