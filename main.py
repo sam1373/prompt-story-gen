@@ -100,6 +100,32 @@ for ep in range(start_epoch, start_epoch + EPOCHS):
     #     print(model.decoder_tokenizer.decode(i))
         
     # print()
+    
+    """ 
+    
+    #beam search
+    
+    prompt = "trump government"
+    prompt_ids = torch.tensor(model.encoder_tokenizer.encode(prompt)).unsqueeze(0)
+    beam_search_story = model.decoder.generate(prompt_ids, 
+        max_length = 100,
+        num_beams = 5, 
+        num_return_sequences = 1, 
+        no_repeat_ngram_size = 2, 
+        early_stopping = True)
+    # print(out)
+
+    # s = beam_search_decoder(out, 3)
+    # print(s)
+    # print(out.shape) #([batch_size, length])
+    # print(logprobs.shape) #([batch_size])
+    
+    for i in beam_search_story:
+        print(model.decoder_tokenizer.decode(i, skip_special_tokens=True))
+    
+    print()
+
+    """ 
 
     epoch_loss = 0
     for prompt, story in tqdm(train_loader):
