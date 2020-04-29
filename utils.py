@@ -162,3 +162,53 @@ def set_all_seeds(seed=123):
     np.random.seed(seed)
     torch.manual_seed(seed)
     torch.cuda.manual_seed(seed)
+
+    
+"""
+# edit parameters later - input format needs to be fixed
+class Node(object):
+    def __init__(self, hidden, previous_node, decoder_input, attn, log_prob, length):
+        self.hidden = hidden
+        self.previous_node = previous_node
+        self.decoder_input = decoder_input
+        self.attn = attn
+        self.log_prob = log_prob
+        self.length = length        
+
+
+def beam_search(beam_width):
+    ...
+    root = Node(hidden, None, decoder_input, None, 0, 1)
+    q = Queue()
+    q.put(root)
+    
+    end_nodes = [] 
+    while not q.empty():
+        candidates = [] 
+    
+        for _ in range(q.qsize()):
+            node = q.get()
+            decoder_input = node.decoder_input
+            hidden = node.hidden
+            
+            if decoder_input.item() == EOS or node.length >= 50:
+                end_nodes.append(node)
+                continue
+              
+            log_prob, hidden, attn = decoder(
+                 decoder_input, hidden, encoder_input
+             )
+             
+             log_prob, indices = log_prob.topk(beam_width) 
+             
+             for k in range(beam_width):
+                  index = indices[k].unsqueeze(0)
+                  log_p = log_prob[k].item()
+                  child = Node(hidden, node, index, attn, node.log_prob + log_p, node.length + 1)
+                  candidates.append((node.log_prob + log_p, child)) 
+           
+         candidates = sorted(candidates, key=lambda x:x[0], reverse=True) 
+         length = min(len(candidates), beam_width)  
+         for i in range(length):
+             q.put(candidates[i][1])  
+"""
