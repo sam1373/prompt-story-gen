@@ -13,6 +13,7 @@ from eval_prompt_rank import prompt_accuracy
 from model import FullModel
 from utils import set_all_seeds, sample_sequence
 from optimizers import AdamW
+from beam_search import *
 
 logger = logging.getLogger()
 logger.setLevel(level=logging.ERROR)
@@ -131,6 +132,19 @@ for ep in range(start_epoch, start_epoch + EPOCHS):
 
     input()
     """
+    
+    # beam search with model params passed correctly
+    # print("Epoch", ep, "start")
+
+    # prompt = ["trump government"]
+    # prompt = model.process_prompt(prompt, prompt_len=PROMPT_LEN).to(device)
+
+    # encoded_prompt, _ = model.encoder(prompt, token_type_ids=None, attention_mask=prompt > 0)
+
+    # out = beam_decode(model.decoder, BATCH_SIZE, None, device, encoded_prompt, context=[model.decoder_tokenizer.encoder['<|endoftext|>']])
+
+    # for i in out:
+    #     print(model.decoder_tokenizer.decode(i))
 
     epoch_loss = 0
     for prompt, story in tqdm(train_loader):
