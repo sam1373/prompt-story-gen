@@ -8,7 +8,7 @@ import torch
 import torch.nn as nn
 
 from data import load_data
-from eval_ppl import evaluate_ppl
+from eval_ppl import *
 from eval_prompt_rank import prompt_accuracy
 from model import FullModel
 from utils import set_all_seeds, sample_sequence
@@ -59,12 +59,7 @@ train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=BATCH_SIZE,
 print('Creating Model...')
 model = FullModel(gpt2_config=GPT2_CONFIG).to(device)
 
-########## for debugging ##########
-a, b = prompt_accuracy(model, val_dataset, PROMPT_LEN, MAX_CONTEXT, device, BATCH_SIZE)
-print(a, b)
 
-word_ppl, bpe_ppl, token_diffs = evaluate_ppl(model, val_dataset, val_dataset_raw, PROMPT_LEN, MAX_CONTEXT, device, BATCH_SIZE)
-########## for debugging ##########
 
 all_params = [p for p in model.parameters() if p.requires_grad]
 optimizer = AdamW(all_params, lr=LEARNING_RATE, weight_decay=WEIGHT_DECAY)
@@ -76,10 +71,20 @@ if os.path.exists(model_save_path):
     print('Restoring trained model from %s' % model_save_path)
     checkpoint = torch.load(model_save_path)
     model.load_state_dict(checkpoint['model'], strict=False)
-    scheduler.load_state_dict(checkpoint['scheduler'])
-    optimizer.load_state_dict(checkpoint['optimizer'])
-    start_epoch = checkpoint['epoch']+1
-    best_val_ppl = checkpoint['val_ppl']
+    #scheduler.load_state_dict(checkpoint['scheduler'])
+    #optimizer.load_state_dict(checkpoint['optimizer'])
+    #start_epoch = checkpoint['epoch']+1
+    #best_val_ppl = checkpoint['val_ppl']
+
+    del checkpoint
+    gc.collect()
+
+########## for debugging ##########
+a, b = prompt_accuracy(model, val_dataset, PROMPT_LEN, MAX_CONTEXT, device, BATCH_SIZE)
+print(a, b)
+
+bpe_ppl = evaluate_ppl(model, val_dataset, val_dataset_raw, PROMPT_LEN, MAX_CONTEXT, device, BATCH_SIZE)
+########## for debugging ##########
 
 print('Training Model for %d epochs...' % EPOCHS)
 ce_loss_fn = nn.CrossEntropyLoss(reduction='none')
@@ -101,8 +106,7 @@ for ep in range(start_epoch, start_epoch + EPOCHS):
         
     # print()
     
-    """ 
-    
+    """
     #beam search
     
     prompt = "trump government"
@@ -125,7 +129,8 @@ for ep in range(start_epoch, start_epoch + EPOCHS):
     
     print()
 
-    """ 
+    input()
+    """
 
     epoch_loss = 0
     for prompt, story in tqdm(train_loader):

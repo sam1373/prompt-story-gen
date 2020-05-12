@@ -18,8 +18,8 @@ def compute_logprobs(model, prompt, story, prompt_len, max_context, device):
     logits = model(story, prompt)
 
     lprobs = torch.log_softmax(logits, dim=-1)
-    # Extract the probability of the target token at each position
-    lprobs = lprobs.gather(-1, story.unsqueeze(-1)).squeeze(-1)
+
+    lprobs = lprobs[:, :-1].gather(-1, story[:, 1:].unsqueeze(-1)).squeeze(-1)
     
     return lprobs
 
@@ -64,6 +64,9 @@ def word_level_ppl(target_tokens, lprobs, tokenizer, raw_token=None):
 
         tokens = text.strip().split(' ')
 
+        print(tokens)
+        input()
+
         # Once a new word is starting to be formed, remove the previous one
         if len(tokens) > i + 1:
             # Token length changed, which means new word has been added.
@@ -72,6 +75,9 @@ def word_level_ppl(target_tokens, lprobs, tokenizer, raw_token=None):
             cur_lp = cur_lp[-1:]
             i += 1
 
+            print(word_lprobs)
+            input()
+
     # Add final token
     word_lprobs.append(sum(cur_lp))
 
@@ -79,7 +85,10 @@ def word_level_ppl(target_tokens, lprobs, tokenizer, raw_token=None):
     if raw_token is not None:
         token_diff = abs(len(word_lprobs) - len(raw_token))
 
+    print(target_tokens)
     word_lprobs = torch.tensor(word_lprobs)
+    print(word_lprobs)
+    input()
     ppl = torch.exp(-word_lprobs.mean()).item()
     
     if ppl == float('inf'):
@@ -103,9 +112,8 @@ def evaluate_ppl(model, val_dataset, val_dataset_raw, prompt_len, max_context, d
     model.eval()
     with torch.no_grad():
         ppls = []
-        word_ppls = []
-        token_diffs = []
-        num_errs = 0
+        #word_ppls = []
+        #token_diffs = []
 
         batch, prompt_story = [], []
         for (prompt, story), (prompt_raw, story_raw) in zip(val_dataset, val_dataset_raw):
@@ -118,7 +126,7 @@ def evaluate_ppl(model, val_dataset, val_dataset_raw, prompt_len, max_context, d
             bpe_tokens = bpe_tokens[:1025] # This limit applies to GPT2
             batch.append((bpe_tokens + [0] * (1025 - len(bpe_tokens)), len(bpe_tokens), story_raw.strip().split(' '))) # Pad with 0
 
-            if len(batch) == batch_size or len(word_ppls) == len(val_dataset) - 1:
+            if len(batch) == batch_size:# or len(word_ppls) == len(val_dataset) - 1:
                 x, x_lens, raw_tokens = zip(*batch)
                 token_tensor = torch.tensor(x, dtype=torch.long, device=device)
                 
@@ -133,12 +141,14 @@ def evaluate_ppl(model, val_dataset, val_dataset_raw, prompt_len, max_context, d
                     target_tokens = token_tensor[i, 1:x_lens[i]]
                     # print(x_lens[i], target_tokens.shape, lps.shape)
                     log_probs = lps[i, :x_lens[i] - 1]
-                    ppl, token_diff = word_level_ppl(target_tokens, log_probs.cpu().float().numpy(), model.decoder_tokenizer, raw_tokens[i])
-                    token_diffs.append(token_diff)
-                    word_ppls.append(ppl)
+                    #ppl, token_diff = word_level_ppl(target_tokens, log_probs.cpu().float().numpy(), model.decoder_tokenizer, raw_tokens[i])
+                    #token_diffs.append(token_diff)
+                    #word_ppls.append(ppl)
                     ppls.append(torch.exp(-log_probs.mean()).item())
+
                 batch, prompt_story = [], []
     
-    print('World Level PPL: {:.2f}, BPE PPL: {:.2f}, Diff: {:.2f}, Skip: {}'.format(np.mean(word_ppls), np.mean(ppls), np.mean(token_diffs), num_errs))
+    print('BPE PPL: {:.2f}'.format(np.mean(ppls)))
 
-    return np.mean(word_ppls), np.mean(ppls), np.mean(token_diffs)
+    return np.mean(ppls)
+
